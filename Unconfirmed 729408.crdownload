@@ -1,0 +1,72 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+import io
+
+st.title("📊 LMS - Model Regresi: Prediksi Status Kelulusan Pelatihan Excel")
+
+st.write("""
+Model ini memprediksi status kelulusan peserta pelatihan Excel berdasarkan:
+- Persentase Partisipasi
+- Persentase Kehadiran
+""")
+
+# Upload dataset
+uploaded_file = st.file_uploader("Unggah File Dataset (Excel)", type=["xlsx"])
+if uploaded_file is not None:
+    df = pd.read_excel(uploaded_file)
+
+    # Preprocessing
+    df['Partisipasi'] = df['Partisipasi'].str.replace('%', '').astype(float)
+    df['status_kelulusan'] = df['status_kelulusan'].map({'Lulus': 1, 'Tidak Lulus': 0})
+
+    X = df[['Partisipasi', 'Kehadiran']]
+    y = df['status_kelulusan']
+
+    # Train model
+    model = LogisticRegression()
+    model.fit(X, y)
+
+    # Input manual
+    st.sidebar.header("Input Manual untuk Prediksi")
+    partisipasi = st.sidebar.slider("Persentase Partisipasi", 0.0, 100.0, 50.0)
+    kehadiran = st.sidebar.slider("Persentase Kehadiran", 0.0, 100.0, 50.0)
+
+    input_data = np.array([[partisipasi, kehadiran]])
+    pred = model.predict(input_data)[0]
+    prob = model.predict_proba(input_data)[0][1]
+
+    st.subheader("Hasil Prediksi Input Manual:")
+    if pred == 1:
+        st.success(f"✅ Peserta Diprediksi LULUS (Probabilitas: {prob:.2%})")
+    else:
+        st.error(f"❌ Peserta Diprediksi TIDAK LULUS (Probabilitas: {prob:.2%})")
+
+    # Tampilkan data dan prediksi batch
+    df['Prediksi'] = model.predict(X)
+    df['Prob_Lulus'] = model.predict_proba(X)[:, 1]
+
+    st.subheader("📄 Tabel Data dan Prediksi")
+    st.dataframe(df[['ID_Peserta', 'Nama', 'Partisipasi', 'Kehadiran', 'status_kelulusan', 'Prediksi', 'Prob_Lulus']])
+
+    # Download hasil
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Prediksi')
+        writer.save()
+        st.download_button(
+            label="📥 Unduh Hasil Prediksi dalam Excel",
+            data=output.getvalue(),
+            file_name="hasil_prediksi_kelulusan.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    # Evaluasi model
+    st.subheader("📊 Evaluasi Model")
+    y_pred = model.predict(X)
+    st.text(classification_report(y, y_pred, target_names=['TIDAK LULUS', 'LULUS']))
+
+else:
+    st.warning("Silakan unggah file dataset Excel untuk memulai prediksi.")
